@@ -1,11 +1,43 @@
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 
 # ---------------- PAGE SETUP ----------------
 st.set_page_config(page_title="SDP Dashboard", layout="wide")
 
 st.markdown(
-    "<h1 style='text-align: center; font-size:36px;'>SDP Chats Performance Dashboard</h1>",
+    """
+    <style>
+    body {font-family: 'Segoe UI', sans-serif;}
+    .title {
+        text-align:center;
+        font-size:36px;
+        font-weight:600;
+        margin-bottom:10px;
+    }
+    .card {
+        border:1px solid #e6e6e6;
+        border-radius:12px;
+        padding:16px;
+        text-align:center;
+        box-shadow:0 2px 6px rgba(0,0,0,0.05);
+    }
+    .card-title {
+        font-size:13px;
+        color:#6c757d;
+    }
+    .card-value {
+        font-size:26px;
+        font-weight:600;
+        margin-top:5px;
+    }
+    .card-sub {
+        font-size:12px;
+        color:#6c757d;
+    }
+    </style>
+    <div class="title">SDP Chats Performance Dashboard</div>
+    """,
     unsafe_allow_html=True
 )
 
@@ -68,18 +100,17 @@ if c2p_file is not None and n2p_file is not None:
         seconds = int(seconds)
         return f"{seconds//60}m {seconds%60}s"
 
-    # Use system/default color unless breached
     def get_color(seconds):
         if pd.isna(seconds):
             return "inherit"
-        return "red" if seconds > 1050 else "inherit"
+        return "red" if seconds > 1050 else "green"
 
-    def metric_card(title, value, seconds=None):
-        color = get_color(seconds)
+    def metric_card(title, value, color="black", subtitle=""):
         return f"""
-        <div style='border:1px solid #ddd; border-radius:10px; padding:15px; text-align:center;'>
-            <div style='font-size:15px; color:gray;'>{title}</div>
-            <div style='font-size:26px; font-weight:bold; color:{color};'>{value}</div>
+        <div class="card">
+            <div class="card-title">{title}</div>
+            <div class="card-value" style="color:{color};">{value}</div>
+            <div class="card-sub">{subtitle}</div>
         </div>
         """
 
@@ -96,23 +127,12 @@ if c2p_file is not None and n2p_file is not None:
 
     g1, g2, g3, g4, g5, g6 = st.columns(6)
 
-    with g1:
-        st.markdown(metric_card("C2P Chats", total_c2p), unsafe_allow_html=True)
-
-    with g2:
-        st.markdown(metric_card("C2P AHT (MM:SS)", format_time(c2p_aht), c2p_aht), unsafe_allow_html=True)
-
-    with g3:
-        st.markdown(metric_card("N2P Chats", total_n2p), unsafe_allow_html=True)
-
-    with g4:
-        st.markdown(metric_card("N2P AHT (MM:SS)", format_time(n2p_aht), n2p_aht), unsafe_allow_html=True)
-
-    with g5:
-        st.markdown(metric_card("Total Chats", total_chats), unsafe_allow_html=True)
-
-    with g6:
-        st.markdown(metric_card("Overall AHT (MM:SS)", format_time(overall_aht), overall_aht), unsafe_allow_html=True)
+    g1.markdown(metric_card("C2P Chats", total_c2p), unsafe_allow_html=True)
+    g2.markdown(metric_card("C2P AHT", format_time(c2p_aht), get_color(c2p_aht)), unsafe_allow_html=True)
+    g3.markdown(metric_card("N2P Chats", total_n2p), unsafe_allow_html=True)
+    g4.markdown(metric_card("N2P AHT", format_time(n2p_aht), get_color(n2p_aht)), unsafe_allow_html=True)
+    g5.markdown(metric_card("Total Chats", total_chats), unsafe_allow_html=True)
+    g6.markdown(metric_card("Overall AHT", format_time(overall_aht), get_color(overall_aht)), unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -126,75 +146,98 @@ if c2p_file is not None and n2p_file is not None:
         c2p_df = agent_df[agent_df[queue_col] == "C2P"]
         n2p_df = agent_df[agent_df[queue_col] == "N2P"]
 
-        c2p_aht = c2p_df[aht_col].mean()
-        n2p_aht = n2p_df[aht_col].mean()
-        total_aht = agent_df[aht_col].mean()
+        total_aht_val = agent_df[aht_col].mean()
 
         result.append({
             "Agent": agent,
             "C2P Chats": len(c2p_df),
-            "C2P AHT": format_time(c2p_aht),
+            "C2P AHT": format_time(c2p_df[aht_col].mean()),
             "N2P Chats": len(n2p_df),
-            "N2P AHT": format_time(n2p_aht),
+            "N2P AHT": format_time(n2p_df[aht_col].mean()),
             "Total Chats": len(agent_df),
-            "Total AHT": format_time(total_aht),
-            "_c2p": c2p_aht,
-            "_n2p": n2p_aht,
-            "_total": total_aht
+            "Total AHT": format_time(total_aht_val),
+            "Total AHT Seconds": total_aht_val
         })
 
     result_df = pd.DataFrame(result)
 
-    # Keep original tabular display
-    result_df_display = result_df.drop(columns=["_c2p", "_n2p", "_total"])
+    # Sort by highest AHT
+    result_df = result_df.sort_values(by="Total AHT Seconds", ascending=False).reset_index(drop=True)
 
     st.subheader("👤 Agent Level Summary")
-    st.dataframe(result_df_display, use_container_width=True)
 
-    # ---------------- KPI SECTION ----------------
+    # Highlight Total AHT column only
+    def highlight_aht(val):
+        if pd.isna(val):
+            return ""
+        return "background-color: #ffe6e6" if val > 1050 else "background-color: #e6ffe6"
+
+    styled_df = result_df.style.applymap(highlight_aht, subset=["Total AHT Seconds"])
+
+    styled_html = f"""
+    <style>
+    table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Segoe UI', sans-serif;
+    }}
+    th, td {{
+        border: 1px solid #e6e6e6;
+        padding: 10px;
+        text-align: center;
+    }}
+    th {{
+        background-color: #f5f7fa;
+        font-weight:600;
+    }}
+    tr:nth-child(even) {{
+        background-color: #fafafa;
+    }}
+    </style>
+    {styled_df.hide(axis="columns", subset=["Total AHT Seconds"]).to_html(index=False)}
+    """
+
+    components.html(styled_html, height=600, scrolling=True)
+
+    # ---------------- KPI CARDS ----------------
     st.markdown("---")
     st.subheader("📈 KPI Performance")
 
     df_kpi = df.copy()
     df_kpi["actual_response_time"] = df_kpi[response_col] - df_kpi[claim_col]
 
-    total_kpi = len(df_kpi)
-
-    claim_45 = (df_kpi[claim_col] <= 45).sum() / total_kpi * 100
-    claim_120 = (df_kpi[claim_col] <= 120).sum() / total_kpi * 100
-    claim_300 = (df_kpi[claim_col] <= 300).sum() / total_kpi * 100
-    response_60 = (df_kpi["actual_response_time"] <= 60).sum() / total_kpi * 100
-
-    # Handle Time KPI
+    claim_45 = (df_kpi[claim_col] <= 45).mean() * 100
+    claim_120 = (df_kpi[claim_col] <= 120).mean() * 100
+    claim_300 = (df_kpi[claim_col] <= 300).mean() * 100
+    response_60 = (df_kpi["actual_response_time"] <= 60).mean() * 100
     overall_time = overall_aht
-    handle_status = "🟢 Met" if overall_time <= 1020 else "🔴 Missed"
 
-    kpi_df = pd.DataFrame({
-        "KPI": [
-            "Claim Time ≤ 45 sec",
-            "Claim Time ≤ 2 min",
-            "Claim Time ≤ 5 min",
-            "Response Time ≤ 60 sec",
-            "Handle Time"
-        ],
-        "Actual": [
-            f"{claim_45:.2f}%",
-            f"{claim_120:.2f}%",
-            f"{claim_300:.2f}%",
-            f"{response_60:.2f}%",
-            format_time(overall_time)
-        ],
-        "Target": ["80%", "80%", "100%", "99%", "17m 0s"],
-        "Status": [
-            "🟢 Met" if claim_45 >= 80 else "🔴 Missed",
-            "🟢 Met" if claim_120 >= 80 else "🔴 Missed",
-            "🟢 Met" if claim_300 >= 100 else "🔴 Missed",
-            "🟢 Met" if response_60 >= 99 else "🔴 Missed",
-            handle_status
-        ]
-    })
+    kpi_status = {
+        "Claim ≤45s": claim_45 >= 80,
+        "Claim ≤2m": claim_120 >= 80,
+        "Claim ≤5m": claim_300 >= 100,
+        "Response ≤60s": response_60 >= 99,
+        "Handle Time": overall_time <= 1020
+    }
 
-    st.dataframe(kpi_df, use_container_width=True)
+    k1, k2, k3, k4, k5 = st.columns(5)
+
+    k1.markdown(metric_card("Claim ≤45s", f"{claim_45:.1f}%", "green" if kpi_status["Claim ≤45s"] else "red", "Target: 80%"), unsafe_allow_html=True)
+    k2.markdown(metric_card("Claim ≤2m", f"{claim_120:.1f}%", "green" if kpi_status["Claim ≤2m"] else "red", "Target: 80%"), unsafe_allow_html=True)
+    k3.markdown(metric_card("Claim ≤5m", f"{claim_300:.1f}%", "green" if kpi_status["Claim ≤5m"] else "red", "Target: 100%"), unsafe_allow_html=True)
+    k4.markdown(metric_card("Response ≤60s", f"{response_60:.1f}%", "green" if kpi_status["Response ≤60s"] else "red", "Target: 99%"), unsafe_allow_html=True)
+    k5.markdown(metric_card("Handle Time", format_time(overall_time), "green" if kpi_status["Handle Time"] else "red", "Target: 17m"), unsafe_allow_html=True)
+
+    # ---------------- KPI NOTE ----------------
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    missed_kpis = [k for k, v in kpi_status.items() if not v]
+
+    if len(missed_kpis) == 0:
+        st.success("✅ All KPIs are in Green. Team has met all the targets.")
+    else:
+        missed_text = ", ".join(missed_kpis)
+        st.error(f"⚠️ The following KPIs were missed: {missed_text}")
 
 else:
     st.info("Please upload both C2P and N2P files to proceed.")
