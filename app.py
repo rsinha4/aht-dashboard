@@ -23,8 +23,9 @@ st.markdown(
         box-shadow:0 2px 6px rgba(0,0,0,0.05);
     }
     .card-title {
-        font-size:13px;
-        color:#6c757d;
+        font-size:16px;   /* increased */
+        font-weight:700;  /* bold */
+        color:#495057;
     }
     .card-value {
         font-size:26px;
@@ -161,12 +162,10 @@ if c2p_file is not None and n2p_file is not None:
 
     result_df = pd.DataFrame(result)
 
-    # Sort by highest AHT
     result_df = result_df.sort_values(by="Total AHT Seconds", ascending=False).reset_index(drop=True)
 
     st.subheader("👤 Agent Level Summary")
 
-    # Highlight Total AHT column only
     def highlight_aht(val):
         if pd.isna(val):
             return ""
@@ -234,7 +233,7 @@ if c2p_file is not None and n2p_file is not None:
     missed_kpis = [k for k, v in kpi_status.items() if not v]
 
     if len(missed_kpis) == 0:
-        st.success("✅ All KPIs are in Green. Team has met all the targets.")
+        st.success("✅ All KPIs are in Green.")
     else:
         missed_text = ", ".join(missed_kpis)
         st.error(f"⚠️ The following KPIs were missed: {missed_text}")
